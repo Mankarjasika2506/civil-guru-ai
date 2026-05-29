@@ -1,0 +1,32 @@
+# Dataset
+DATA/
+
+# Database
+db/
+chroma_db/
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# AI Models
+models/
+*.gguf
+*.bin
+
+# Temp files
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
