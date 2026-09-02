@@ -404,7 +404,8 @@ div[data-testid="stMarkdownContainer"] p {
 # ── Hero ──
 col1, col2, col3 = st.columns([2, 1, 2])
 with col2:
-    st.image("logo_transparent.png", width=350)
+    logo_path = os.path.join(os.path.dirname(__file__), "logo_transparent.png")
+    st.image(logo_path, width=350)
 
 st.markdown("""
 <div style="text-align:center; padding:0 0 30px;">
