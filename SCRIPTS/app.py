@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import time
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 st.set_page_config(
     page_title="Civil Guru",
@@ -679,21 +680,13 @@ with tab4:
                 step4 = st.empty()
                 step4.markdown('<div class="step-box"><div class="step-icon">✍️</div><div class="step-text">AI writing structured UPSC answer...</div></div>', unsafe_allow_html=True)
 
-                import chromadb, ollama
+                
                 from sentence_transformers import SentenceTransformer, util
                 from reranker import rerank_chunks
-
-                MODEL = "llama3.2:3b"
+                from qdrant_client_setup import query_collection
+                from groq_client_setup import generate
+                
                 emb_model = SentenceTransformer("all-MiniLM-L6-v2")
-
-                class EF:
-                    def __call__(self, input): return emb_model.encode(input).tolist()
-                    def name(self): return "all-MiniLM-L6-v2"
-                    def embed_documents(self, input): return emb_model.encode(input).tolist()
-                    def embed_query(self, input): return emb_model.encode(input).tolist()
-
-                client = chromadb.PersistentClient(path="../db")
-                collection = client.get_collection("civil_guru", embedding_function=EF())
 
                 SUBJECTS = {
                     "ART&CULTURE": "art culture painting dance music sculpture cave prehistoric",
@@ -713,16 +706,18 @@ with tab4:
                         best_sc, best_sub = sc, sub
 
                 try:
-                    docs = collection.query(query_texts=[question], n_results=15, where={"subject": best_sub})["documents"][0]
-                except:
-                    docs = collection.query(query_texts=[question], n_results=15)["documents"][0]
+                    points = query_collection(question, "civil_guru", n_results=15, subject_filter=best_sub)
+                    docs = [p.payload["text"] for p in points]
+                    if not docs:
+                        raise ValueError("empty filtered result")
+                except Exception:
+                    points = query_collection(question, "civil_guru", n_results=15)
+                    docs = [p.payload["text"] for p in points]
 
                 docs = rerank_chunks(question, docs, top_k=3)
                 context = "\n\n".join(docs)
-
-                response = ollama.chat(
-                    model=MODEL,
-                    messages=[{"role": "user", "content": f"""
+                
+                answer = generate(f"""
 You are a UPSC Mains topper. Write a complete structured answer.
 RULES:
 - Use only given context
@@ -732,10 +727,8 @@ RULES:
 
 Question: {question}
 Context: {context}
-"""}],
-                    options={"num_predict": 800}
-                )
-                answer = response["message"]["content"]
+""", max_tokens=1200)
+                    
 
                 step5 = st.empty()
                 step5.markdown('<div class="step-box step-done"><div class="step-icon">✅</div><div class="step-text">Answer generated!</div></div>', unsafe_allow_html=True)

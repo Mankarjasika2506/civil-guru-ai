@@ -1,33 +1,25 @@
 import pytesseract
 from PIL import Image
-import ollama
 import re
-import chromadb
-from sentence_transformers import SentenceTransformer
 from reranker import rerank_chunks
+from qdrant_client_setup import retrieve_context as qdrant_retrieve_context
+from groq_client_setup import generate
 
 # ── Tesseract path ──
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+import platform
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    
+def retrieve_context(question):
+    try:
+        docs_text = qdrant_retrieve_context(question, "civil_guru", n_results=10)
+        docs = docs_text.split("\n\n")
+        docs = rerank_chunks(question, docs, top_k=3)
+        return "\n\n".join(docs)
+    except Exception as e:
+        print(f"Retrieval error: {e}")
+        return ""
 
-MODEL = "llama3.2:3b"
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-class MyEmbeddingFunction:
-    def __call__(self, input):
-        return model.encode(input).tolist()
-    def name(self):
-        return "all-MiniLM-L6-v2"
-    def embed_documents(self, input):
-        return model.encode(input).tolist()
-    def embed_query(self, input):
-        return model.encode(input).tolist()
-
-client = chromadb.PersistentClient(path="../db")
-civil_guru = client.get_collection(
-    name="civil_guru",
-    embedding_function=MyEmbeddingFunction()
-)
 
 def extract_text_from_image(image_path):
     print(f"📸 Reading image: {image_path}")
@@ -49,23 +41,11 @@ def extract_text_from_image(image_path):
     except Exception as e:
         return None, str(e)
 
-def retrieve_context(question):
-    try:
-        results = civil_guru.query(
-            query_texts=[question],
-            n_results=10
-        )
-        docs = results["documents"][0]
-        docs = rerank_chunks(question, docs, top_k=3)
-        return "\n\n".join(docs)
-    except:
-        return ""
 
 def evaluate_handwritten_answer(image_path, question):
     print(f"\n📝 Evaluating handwritten answer...")
     print(f"❓ Question: {question}")
 
-    # Step 1 — Extract text from image
     extracted_text, error = extract_text_from_image(image_path)
 
     if error:
@@ -74,10 +54,8 @@ def evaluate_handwritten_answer(image_path, question):
 
     print(f"\n📄 Extracted Text:\n{extracted_text}\n")
 
-    # Step 2 — Retrieve context
     context = retrieve_context(question)
 
-    # Step 3 — Evaluate
     prompt = f"""
 You are a UPSC Mains Examiner.
 
@@ -108,14 +86,8 @@ HANDWRITING NOTE: comment on clarity of handwriting
 """
 
     try:
-        response = ollama.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            options={"num_predict": 350}
-        )
-        raw = response["message"]["content"]
+        raw = generate(prompt, max_tokens=700)
 
-        # Parse scores
         scores = {}
         maxes = {
             "INTRODUCTION": 2,
@@ -171,6 +143,7 @@ TOTAL        : {total}/15
     except Exception as e:
         print(f"⚠️ Evaluation failed: {e}")
         return None
+
 
 if __name__ == "__main__":
     print("📸 UPSC Handwritten Answer Evaluator")

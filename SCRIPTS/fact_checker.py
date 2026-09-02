@@ -1,48 +1,23 @@
-import chromadb
-import ollama
 import re
-from sentence_transformers import SentenceTransformer
 from reranker import rerank_chunks
+from qdrant_client_setup import query_collection
+from groq_client_setup import generate
 
-MODEL = "llama3.2:3b"
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-class MyEmbeddingFunction:
-    def __call__(self, input):
-        return model.encode(input).tolist()
-    def name(self):
-        return "all-MiniLM-L6-v2"
-    def embed_documents(self, input):
-        return model.encode(input).tolist()
-    def embed_query(self, input):
-        return model.encode(input).tolist()
-
-client = chromadb.PersistentClient(path="../db")
-
-pib = client.get_collection(
-    name="pib_articles",
-    embedding_function=MyEmbeddingFunction()
-)
-prs = client.get_collection(
-    name="prs_articles",
-    embedding_function=MyEmbeddingFunction()
-)
 
 def retrieve_evidence(claim):
     all_docs = []
 
     try:
-        r = pib.query(query_texts=[claim], n_results=5)
-        all_docs.extend(r["documents"][0])
-    except:
-        pass
+        points = query_collection(claim, "pib_articles", n_results=5)
+        all_docs.extend([p.payload["text"] for p in points])
+    except Exception as e:
+        print(f"pib retrieval error: {e}")
 
     try:
-        r = prs.query(query_texts=[claim], n_results=3)
-        all_docs.extend(r["documents"][0])
-    except:
-        pass
+        points = query_collection(claim, "prs_articles", n_results=3)
+        all_docs.extend([p.payload["text"] for p in points])
+    except Exception as e:
+        print(f"prs retrieval error: {e}")
 
     if all_docs:
         all_docs = rerank_chunks(claim, all_docs, top_k=3)
@@ -89,13 +64,7 @@ Official Source:
 """
 
     try:
-        response = ollama.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            options={"num_predict": 300}
-        )
-        output = response["message"]["content"]
-
+        output = generate(prompt, max_tokens=600, temperature=0.3, top_p=0.9)
         # Smarter verdict
         supported_count = output.lower().count("supported") + output.lower().count("fact")
         contradiction_count = output.lower().count("contradiction") + output.lower().count("inaccurac")

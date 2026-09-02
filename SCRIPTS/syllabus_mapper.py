@@ -1,38 +1,10 @@
-import chromadb
-import ollama
 import json
 import re
 from sentence_transformers import SentenceTransformer, util
-
-MODEL = "llama3.2:3b"
+from qdrant_client_setup import query_collection
+from groq_client_setup import generate
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
-
-class MyEmbeddingFunction:
-    def __call__(self, input):
-        return model.encode(input).tolist()
-    def name(self):
-        return "all-MiniLM-L6-v2"
-    def embed_documents(self, input):
-        return model.encode(input).tolist()
-    def embed_query(self, input):
-        return model.encode(input).tolist()
-
-# ── ChromaDB collections ──
-client = chromadb.PersistentClient(path="../db")
-
-civil_guru = client.get_collection(
-    name="civil_guru",
-    embedding_function=MyEmbeddingFunction()
-)
-pib = client.get_collection(
-    name="pib_articles",
-    embedding_function=MyEmbeddingFunction()
-)
-prs = client.get_collection(
-    name="prs_articles",
-    embedding_function=MyEmbeddingFunction()
-)
 
 # ── GS Paper descriptions ──
 GS_PAPERS = {
@@ -83,13 +55,12 @@ def retrieve_context(topic):
     sources = []
 
     try:
-        r = civil_guru.query(query_texts=[topic], n_results=5)
-        docs = r["documents"][0]
-        metas = r["metadatas"][0]
+        points = query_collection(topic, "civil_guru", n_results=5)
+        docs = [p.payload["text"] for p in points]
         all_docs.extend(docs)
 
-        for meta in metas:
-            subject = meta.get("subject", "").upper()
+        for p in points:
+            subject = p.payload.get("subject", "").upper()
             if subject == "POLITY":
                 src = "📖 Laxmikanth — Indian Polity"
             elif subject == "HISTORY":
@@ -108,26 +79,26 @@ def retrieve_context(topic):
                 src = "📚 NCERT Textbooks"
             if src not in sources:
                 sources.append(src)
-    except:
-        pass
+    except Exception as e:
+        print(f"civil_guru retrieval error: {e}")
 
     try:
-        r = pib.query(query_texts=[topic], n_results=3)
-        docs = r["documents"][0]
+        points = query_collection(topic, "pib_articles", n_results=3)
+        docs = [p.payload["text"] for p in points]
         if docs:
             all_docs.extend(docs)
             sources.append("📰 PIB — Press Information Bureau")
-    except:
-        pass
+    except Exception as e:
+        print(f"pib retrieval error: {e}")
 
     try:
-        r = prs.query(query_texts=[topic], n_results=2)
-        docs = r["documents"][0]
+        points = query_collection(topic, "prs_articles", n_results=2)
+        docs = [p.payload["text"] for p in points]
         if docs:
             all_docs.extend(docs)
             sources.append("⚖️ PRS — Legislative Research India")
-    except:
-        pass
+    except Exception as e:
+        print(f"prs retrieval error: {e}")
 
     return "\n\n".join(all_docs[:5]), sources
 
@@ -170,12 +141,7 @@ Context:
 """
 
     try:
-        response = ollama.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            options={"num_predict": 600}
-        )
-        output = response["message"]["content"].strip()
+        output = generate(prompt, max_tokens=900)
         output = output.replace("```json", "").replace("```", "").strip()
         start = output.find("{")
         end = output.rfind("}") + 1
