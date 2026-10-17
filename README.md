@@ -1,6 +1,6 @@
 # Civil Guru 🏛️
 
-**AI-powered UPSC exam preparation assistant** — four retrieval-augmented agents built on a self-hosted RAG pipeline, deployed live on Streamlit Community Cloud.
+**AI-powered UPSC exam preparation assistant**: four retrieval-augmented agents built on a RAG pipeline with Qdrant Cloud and Groq, deployed live on Streamlit Community Cloud.
 
 **Live app:**  https://civil-guru-ai-wrdivsydaysa5pfgkexzgm.streamlit.app
 
