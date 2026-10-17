@@ -47,3 +47,23 @@ def query_collection(question, collection_name, n_results=10, subject_filter=Non
         query_filter=query_filter,
     )
     return results.points
+
+def build_references(points):
+    """Build references only from chunks that were actually sent to the LLM."""
+    refs, seen_urls, pages = [], set(), {}
+    for p in points:
+        pl = p.payload
+        url = pl.get("url")
+        if url:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            label = pl.get("title") or f"{pl.get('source', 'Official')} release"
+            refs.append({"label": label, "url": url})
+        else:
+            subject = pl.get("subject", "General").title()
+            pages.setdefault(subject, set()).add(str(pl.get("page", "?")))
+    for subject, pg in pages.items():
+        nums = sorted(pg, key=lambda x: int(x) if x.isdigit() else 0)
+        refs.append({"label": f"Textbook corpus: {subject}, pp. {', '.join(nums)}", "url": None})
+    return refs
