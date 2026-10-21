@@ -90,13 +90,6 @@ Streamlit UI (app.py)
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in the project root:
-```
-QDRANT_URL=your_qdrant_cluster_url
-QDRANT_API_KEY=your_qdrant_api_key
-GROQ_API_KEY=your_groq_api_key
-```
-
 ```bash
 cd SCRIPTS
 streamlit run app.py
